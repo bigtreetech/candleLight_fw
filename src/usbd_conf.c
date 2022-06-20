@@ -32,27 +32,36 @@ PCD_HandleTypeDef hpcd_USB_FS;
 
 void HAL_PCD_MspInit(PCD_HandleTypeDef* hpcd)
 {
+#if defined(USB_DRD_FS)
+    RCC_PeriphCLKInitTypeDef PeriphClkInit = {0};
+#endif
+
 	if(hpcd->Instance==USB_INTERFACE) {
 
 #if defined(USB)
-		__HAL_RCC_USB_CLK_ENABLE();
+	__HAL_RCC_USB_CLK_ENABLE();
 #elif defined(USB_OTG_FS)
-		__HAL_RCC_USB_OTG_FS_CLK_ENABLE();
+	__HAL_RCC_USB_OTG_FS_CLK_ENABLE();
+#elif defined(USB_DRD_FS)
+	PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_USB;
+	PeriphClkInit.UsbClockSelection = RCC_USBCLKSOURCE_PLL;
+	HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit);
+	__HAL_RCC_USB_CLK_ENABLE();
 #endif
-		HAL_NVIC_SetPriority(USB_INTERRUPT, 1, 0);
-		HAL_NVIC_EnableIRQ(USB_INTERRUPT);
+	HAL_NVIC_SetPriority(USB_INTERRUPT, 1, 0);
+	HAL_NVIC_EnableIRQ(USB_INTERRUPT);
 	}
 }
 
 void HAL_PCD_MspDeInit(PCD_HandleTypeDef* hpcd)
 {
 	if(hpcd->Instance==USB_INTERFACE) {
-#if defined(USB)
-		__HAL_RCC_USB_CLK_DISABLE();
+#if defined(USB) || defined(USB_DRD_FS)
+	__HAL_RCC_USB_CLK_DISABLE();
 #elif defined(USB_OTG_FS)
-		__HAL_RCC_USB_OTG_FS_CLK_DISABLE();
+	__HAL_RCC_USB_OTG_FS_CLK_DISABLE();
 #endif
-		HAL_NVIC_DisableIRQ(USB_INTERRUPT);
+	HAL_NVIC_DisableIRQ(USB_INTERRUPT);
 	}
 }
 
@@ -116,6 +125,7 @@ USBD_StatusTypeDef USBD_LL_Init(USBD_HandleTypeDef *pdev)
 	hpcd_USB_FS.pData = pdev;
 	pdev->pData = &hpcd_USB_FS;
 
+#if defined(STM32F0)||defined(STM32F4)
 	hpcd_USB_FS.Instance = USB_INTERFACE;
 	hpcd_USB_FS.Init.dev_endpoints = 5U;
 	hpcd_USB_FS.Init.speed = PCD_SPEED_FULL;
@@ -123,14 +133,32 @@ USBD_StatusTypeDef USBD_LL_Init(USBD_HandleTypeDef *pdev)
 	hpcd_USB_FS.Init.phy_itface = PCD_PHY_EMBEDDED;
 	hpcd_USB_FS.Init.low_power_enable = DISABLE;
 	hpcd_USB_FS.Init.lpm_enable = DISABLE;
+#endif
+
 #if defined(STM32F4)
 	hpcd_USB_FS.Init.dma_enable = DISABLE;
 	hpcd_USB_FS.Init.Sof_enable = DISABLE;
 	hpcd_USB_FS.Init.vbus_sensing_enable = DISABLE;
 	hpcd_USB_FS.Init.use_dedicated_ep1 = DISABLE;
 #endif
-	HAL_PCD_Init(&hpcd_USB_FS);
 
+#if defined(STM32G0)
+  hpcd_USB_FS.Instance = USB_DRD_FS;
+  hpcd_USB_FS.Init.dev_endpoints = 8;	
+  hpcd_USB_FS.Init.Host_channels = 8;
+  hpcd_USB_FS.Init.speed = USBD_FS_SPEED;
+  hpcd_USB_FS.Init.ep0_mps = EP_MPS_64;
+  hpcd_USB_FS.Init.phy_itface = PCD_PHY_EMBEDDED;
+  hpcd_USB_FS.Init.Sof_enable = DISABLE;
+  hpcd_USB_FS.Init.low_power_enable = DISABLE;
+  hpcd_USB_FS.Init.lpm_enable = DISABLE;
+  hpcd_USB_FS.Init.battery_charging_enable = DISABLE;
+  hpcd_USB_FS.Init.vbus_sensing_enable = DISABLE;
+  hpcd_USB_FS.Init.bulk_doublebuffer_enable = ENABLE;
+  hpcd_USB_FS.Init.iso_singlebuffer_enable = DISABLE;
+#endif
+
+	HAL_PCD_Init(&hpcd_USB_FS);
 
 	/*
 	* PMA layout
@@ -141,7 +169,7 @@ USBD_StatusTypeDef USBD_LL_Init(USBD_HandleTypeDef *pdev)
 	*  0xD8 - 0x157 (128 bytes) EP1 OUT (buffer 1)
 	* 0x158 - 0x1D7 (128 bytes) EP1 OUT (buffer 2)
 	*/
-#if defined(USB)
+#if defined(USB) || defined(USB_DRD_FS)
 	HAL_PCDEx_PMAConfig((PCD_HandleTypeDef*)pdev->pData , 0x00 , PCD_SNG_BUF, 0x18);
 	HAL_PCDEx_PMAConfig((PCD_HandleTypeDef*)pdev->pData , 0x80 , PCD_SNG_BUF, 0x58);
 	HAL_PCDEx_PMAConfig((PCD_HandleTypeDef*)pdev->pData , 0x81 , PCD_SNG_BUF, 0x98);
@@ -150,7 +178,6 @@ USBD_StatusTypeDef USBD_LL_Init(USBD_HandleTypeDef *pdev)
 	HAL_PCDEx_SetRxFiFo((PCD_HandleTypeDef*)pdev->pData, USB_RX_FIFO_SIZE); // shared RX FIFO
 	HAL_PCDEx_SetTxFiFo((PCD_HandleTypeDef*)pdev->pData, 0U, 64U / 4U);     // 0x80, 64 bytes (div by 4 for words)
 	HAL_PCDEx_SetTxFiFo((PCD_HandleTypeDef*)pdev->pData, 1U, 64U / 4U);     // 0x81, 64 bytes (div by 4 for words)
-
 #endif
 
 	return USBD_OK;

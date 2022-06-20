@@ -68,6 +68,30 @@ int main(void)
 
 	flash_load();
 
+#if defined(STM32G0)
+	if (FLASH->OPTR & FLASH_OPTR_nBOOT_SEL)
+	{
+		// unlock flash
+		FLASH->KEYR = FLASH_KEY1;
+		FLASH->KEYR = FLASH_KEY2;
+
+		// unlock options
+		FLASH->OPTKEYR = FLASH_OPTKEY1;
+		FLASH->OPTKEYR = FLASH_OPTKEY2;
+
+		FLASH->OPTR &= ~(FLASH_OPTR_nBOOT_SEL); // BOOT0 signal is defined by BOOT0 pin value (legacy mode)
+		FLASH_WaitForLastOperation(1000);
+		FLASH->CR |= FLASH_CR_OPTSTRT;
+		FLASH_WaitForLastOperation(1000);
+		FLASH->CR &= ~FLASH_CR_OPTSTRT;
+
+		// lock options
+		FLASH->CR |= FLASH_CR_OPTLOCK;
+		// lock flash
+		FLASH->CR |= FLASH_CR_LOCK;
+	}
+#endif
+
 	gpio_init();
 
 	led_init(&hLED, LED1_GPIO_Port, LED1_Pin, LED1_Active_High, LED2_GPIO_Port, LED2_Pin, LED2_Active_High);
@@ -85,7 +109,6 @@ int main(void)
 
 	can_init(&hCAN, CAN_INTERFACE);
 	can_disable(&hCAN);
-
 
 	q_frame_pool = queue_create(CAN_QUEUE_SIZE);
 	q_from_host  = queue_create(CAN_QUEUE_SIZE);
@@ -110,6 +133,7 @@ int main(void)
 #endif
 
 	while (1) {
+
 		struct gs_host_frame *frame = queue_pop_front(q_from_host);
 		if (frame != 0) { // send can message from host
 			if (can_send(&hCAN, frame)) {
@@ -129,11 +153,17 @@ int main(void)
 			send_to_host();
 		}
 
-		if (can_is_rx_pending(&hCAN)) {
+		if (can_is_rx_pending(&hCAN)) 
+		{
 			struct gs_host_frame *frame = queue_pop_front(q_frame_pool);
 			if (frame != 0)
 			{
 				if (can_receive(&hCAN, frame)) {
+
+					#if defined(STM32G0)
+					rx_can2_ok=0;
+					#endif
+					
 					received_count++;
 
 					frame->timestamp_us = timer_get();
@@ -181,9 +211,12 @@ int main(void)
 void HAL_MspInit(void)
 {
 	__HAL_RCC_SYSCFG_CLK_ENABLE();
+    __HAL_RCC_PWR_CLK_ENABLE();	
 #if defined(STM32F4)
 	__HAL_RCC_PWR_CLK_ENABLE();
 	__HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE1);
+#elif defined(STM32G0)
+    HAL_SYSCFG_StrobeDBattpinsConfig(SYSCFG_CFGR1_UCPD1_STROBE | SYSCFG_CFGR1_UCPD2_STROBE);
 #endif
 	HAL_NVIC_SetPriority(SysTick_IRQn, 0, 0);
 }
@@ -242,14 +275,38 @@ void SystemClock_Config(void)
 	RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV4;
 	RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV2;
 	HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_5);
+#elif defined(STM32G0)
+	HAL_PWREx_ControlVoltageScaling(PWR_REGULATOR_VOLTAGE_SCALE1);
+
+	RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI|RCC_OSCILLATORTYPE_HSI48;
+	RCC_OscInitStruct.HSIState = RCC_HSI_ON;
+	RCC_OscInitStruct.HSI48State = RCC_HSI48_ON;
+	RCC_OscInitStruct.HSIDiv = RCC_HSI_DIV1;
+	RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
+	RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
+	RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI;
+	RCC_OscInitStruct.PLL.PLLM = RCC_PLLM_DIV2;
+	RCC_OscInitStruct.PLL.PLLN = 12;
+	RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
+	RCC_OscInitStruct.PLL.PLLQ = RCC_PLLQ_DIV2;
+	RCC_OscInitStruct.PLL.PLLR = RCC_PLLR_DIV2;
+	HAL_RCC_OscConfig(&RCC_OscInitStruct);
+
+	RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
+								|RCC_CLOCKTYPE_PCLK1;
+	RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
+	RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
+	RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
+
+	HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_1);
 #endif
 
 	HAL_SYSTICK_Config(HAL_RCC_GetHCLKFreq()/1000);
 
 	HAL_SYSTICK_CLKSourceConfig(SYSTICK_CLKSOURCE_HCLK);
 
-	/* SysTick_IRQn interrupt configuration */
 	HAL_NVIC_SetPriority(SysTick_IRQn, 0, 0);
+
 }
 
 bool send_to_host_or_enqueue(struct gs_host_frame *frame)
@@ -271,4 +328,55 @@ void send_to_host()
 		queue_push_front(q_to_host, frame);
 	}
 }
+
+#if defined(STM32G0)
+void HAL_FDCAN_MspInit(FDCAN_HandleTypeDef* hfdcan)
+{
+	GPIO_InitTypeDef GPIO_InitStruct = {0};
+	RCC_PeriphCLKInitTypeDef PeriphClkInit = {0};
+
+	if(hfdcan->Instance==FDCAN2)
+	{
+		
+		PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_FDCAN;
+		PeriphClkInit.FdcanClockSelection = RCC_FDCANCLKSOURCE_PCLK1;
+
+		HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit);
+
+		__HAL_RCC_FDCAN_CLK_ENABLE();
+		__HAL_RCC_GPIOB_CLK_ENABLE();
+
+		GPIO_InitStruct.Pin = GPIO_PIN_5|GPIO_PIN_6;
+		GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
+		GPIO_InitStruct.Pull = GPIO_NOPULL;
+		GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+		GPIO_InitStruct.Alternate = GPIO_AF3_FDCAN2;
+		HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+		HAL_NVIC_SetPriority(TIM16_FDCAN_IT0_IRQn, 1, 0);
+		HAL_NVIC_EnableIRQ(TIM16_FDCAN_IT0_IRQn);
+	}
+}
+
+void HAL_FDCAN_MspDeInit(FDCAN_HandleTypeDef* hfdcan)
+{
+	if(hfdcan->Instance==FDCAN2)
+	{
+		__HAL_RCC_FDCAN_CLK_DISABLE();
+
+		HAL_GPIO_DeInit(GPIOB, GPIO_PIN_5|GPIO_PIN_6);
+		HAL_NVIC_DisableIRQ(TIM16_FDCAN_IT0_IRQn);
+	}
+}
+
+void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
+{
+	if((RxFifo0ITs & FDCAN_IT_RX_FIFO0_NEW_MESSAGE) != RESET)
+	{
+		HAL_FDCAN_GetRxMessage(hfdcan, FDCAN_RX_FIFO0, &RxHeader, RxData);
+
+		rx_can2_ok = 1;
+	}
+}
+#endif
 

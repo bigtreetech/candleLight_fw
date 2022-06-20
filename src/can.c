@@ -27,11 +27,55 @@ THE SOFTWARE.
 #include "can.h"
 #include "config.h"
 
+#if defined(STM32G0)
+#define CAN_TypeDef  FDCAN_GlobalTypeDef
+
+FDCAN_HandleTypeDef hfdcan2;
+
+FDCAN_TxHeaderTypeDef TxHeader;
+FDCAN_RxHeaderTypeDef RxHeader;
+
+uint8_t	rx_can2_ok = 0;
+can_data_t *_hcan;
+
+uint8_t TxData[64]={0};
+uint8_t RxData[64]={0};
+
+#define CAN_ESR_EWGF_Pos       (0U)                                            
+#define CAN_ESR_EWGF_Msk       (0x1UL << CAN_ESR_EWGF_Pos)                      /*!< 0x00000001 */
+#define CAN_ESR_EWGF           CAN_ESR_EWGF_Msk                                /*!<Error Warning Flag */
+#define CAN_ESR_EPVF_Pos       (1U)                                            
+#define CAN_ESR_EPVF_Msk       (0x1UL << CAN_ESR_EPVF_Pos)                      /*!< 0x00000002 */
+#define CAN_ESR_EPVF           CAN_ESR_EPVF_Msk                                /*!<Error Passive Flag */
+#define CAN_ESR_BOFF_Pos       (2U)                                            
+#define CAN_ESR_BOFF_Msk       (0x1UL << CAN_ESR_BOFF_Pos)                      /*!< 0x00000004 */
+#define CAN_ESR_BOFF           CAN_ESR_BOFF_Msk                                /*!<Bus-Off Flag */
+
+#define CAN_ESR_LEC_Pos        (4U)                                            
+#define CAN_ESR_LEC_Msk        (0x7UL << CAN_ESR_LEC_Pos)                       /*!< 0x00000070 */
+#define CAN_ESR_LEC            CAN_ESR_LEC_Msk                                 /*!<LEC[2:0] bits (Last Error Code) */
+#define CAN_ESR_LEC_0          (0x1UL << CAN_ESR_LEC_Pos)                       /*!< 0x00000010 */
+#define CAN_ESR_LEC_1          (0x2UL << CAN_ESR_LEC_Pos)                       /*!< 0x00000020 */
+#define CAN_ESR_LEC_2          (0x4UL << CAN_ESR_LEC_Pos)                       /*!< 0x00000040 */
+
+#define CAN_ESR_TEC_Pos        (16U)                                           
+#define CAN_ESR_TEC_Msk        (0xFFUL << CAN_ESR_TEC_Pos)                      /*!< 0x00FF0000 */
+#define CAN_ESR_TEC            CAN_ESR_TEC_Msk                                 /*!<Least significant byte of the 9-bit Transmit Error Counter */
+#define CAN_ESR_REC_Pos        (24U)                                           
+#define CAN_ESR_REC_Msk        (0xFFUL << CAN_ESR_REC_Pos)                      /*!< 0xFF000000 */
+#define CAN_ESR_REC            CAN_ESR_REC_Msk                                 /*!<Receive Error Counter */
+
+#endif
+
 void can_init(can_data_t *hcan, CAN_TypeDef *instance)
 {
+
+#if defined(STM32F0) ||	defined(STM32F4)
 	__HAL_RCC_CAN1_CLK_ENABLE();
 
 	GPIO_InitTypeDef itd;
+#endif
+
 #if defined(STM32F0)
 	itd.Pin = GPIO_PIN_8|GPIO_PIN_9;
 	itd.Mode = GPIO_MODE_AF_PP;
@@ -48,16 +92,23 @@ void can_init(can_data_t *hcan, CAN_TypeDef *instance)
 	HAL_GPIO_Init(GPIOD, &itd);
 #endif
 
+#if defined(STM32F0) || defined(STM32F4)
 	hcan->instance   = instance;
+#elif defined(STM32G0)
+	hcan->instance   = instance;
+	hcan->instance   = FDCAN2;
+#endif
+
 	hcan->brp        = 6;
 	hcan->sjw		 = 1;
-#if defined(STM32F0)
+#if defined(STM32F0) || defined(STM32G0)
 	hcan->phase_seg1 = 13;
 	hcan->phase_seg2 = 2;
 #elif defined(STM32F4)
 	hcan->phase_seg1 = 12;
 	hcan->phase_seg2 = 1;
 #endif
+	
 }
 
 bool can_set_bittiming(can_data_t *hcan, uint16_t brp, uint8_t phase_seg1, uint8_t phase_seg2, uint8_t sjw)
@@ -77,8 +128,31 @@ bool can_set_bittiming(can_data_t *hcan, uint16_t brp, uint8_t phase_seg1, uint8
 	}
 }
 
+#if defined(STM32G0)
+void FDCAN_Config(void)
+{
+	FDCAN_FilterTypeDef sFilterConfig;
+
+	sFilterConfig.IdType = FDCAN_STANDARD_ID;
+	sFilterConfig.FilterIndex = 0;
+	sFilterConfig.FilterType = FDCAN_FILTER_MASK;
+	sFilterConfig.FilterConfig = FDCAN_FILTER_TO_RXFIFO0;
+	sFilterConfig.FilterID1 = 0;
+	sFilterConfig.FilterID2 = 0;
+	HAL_FDCAN_ConfigFilter(&hfdcan2, &sFilterConfig);
+
+	HAL_FDCAN_ConfigGlobalFilter(&hfdcan2, FDCAN_REJECT, FDCAN_REJECT, FDCAN_FILTER_REMOTE, FDCAN_FILTER_REMOTE);
+
+	HAL_FDCAN_Start(&hfdcan2);
+	HAL_FDCAN_ActivateNotification(&hfdcan2, FDCAN_IT_RX_FIFO0_NEW_MESSAGE, 0);
+}
+#endif
+
 void can_enable(can_data_t *hcan, bool loop_back, bool listen_only, bool one_shot)
 {
+
+#if defined(STM32F0) || defined(STM32F4)
+
 	CAN_TypeDef *can = hcan->instance;
 
 	uint32_t mcr = CAN_MCR_INRQ
@@ -120,6 +194,58 @@ void can_enable(can_data_t *hcan, bool loop_back, bool listen_only, bool one_sho
 	can->FA1R |= filter_bit;         // enable filter
 	can->FMR &= ~CAN_FMR_FINIT;
 
+#elif defined(STM32G0)
+	hfdcan2.Instance = FDCAN2;
+	hfdcan2.Init.ClockDivider = FDCAN_CLOCK_DIV1;
+	hfdcan2.Init.FrameFormat = FDCAN_FRAME_CLASSIC;
+
+	if(listen_only)
+	{
+		hfdcan2.Init.Mode = FDCAN_MODE_BUS_MONITORING;	
+	}
+	else
+	{
+		if(loop_back)
+		{
+			hfdcan2.Init.Mode = FDCAN_MODE_INTERNAL_LOOPBACK;	
+		}
+		else
+		{
+			hfdcan2.Init.Mode = FDCAN_MODE_NORMAL;	
+		}
+	}	
+
+	if(one_shot)
+	{
+	  hfdcan2.Init.AutoRetransmission = ENABLE;
+	}
+	else
+	{
+	  hfdcan2.Init.AutoRetransmission = DISABLE;
+	}
+
+	hfdcan2.Init.TransmitPause = DISABLE;
+	hfdcan2.Init.ProtocolException = DISABLE;
+
+	hfdcan2.Init.NominalPrescaler = hcan->brp;
+	hfdcan2.Init.NominalSyncJumpWidth = hcan->sjw;
+	hfdcan2.Init.NominalTimeSeg1 = hcan->phase_seg1;
+	hfdcan2.Init.NominalTimeSeg2 = hcan->phase_seg2;
+		
+	hfdcan2.Init.DataPrescaler = hcan->brp;
+	hfdcan2.Init.DataSyncJumpWidth = hcan->sjw;
+	hfdcan2.Init.DataTimeSeg1 = hcan->phase_seg1;
+	hfdcan2.Init.DataTimeSeg2 = hcan->phase_seg2;
+
+	hfdcan2.Init.StdFiltersNbr = 1;
+	hfdcan2.Init.ExtFiltersNbr = 0;
+	hfdcan2.Init.TxFifoQueueMode = FDCAN_TX_FIFO_OPERATION;
+	
+    HAL_FDCAN_Init(&hfdcan2);
+	FDCAN_Config();
+
+#endif
+
 #ifdef nCANSTBY_Pin
 	HAL_GPIO_WritePin(nCANSTBY_Port, nCANSTBY_Pin, GPIO_PIN_SET);
 #endif
@@ -131,23 +257,45 @@ void can_disable(can_data_t *hcan)
 #ifdef nCANSTBY_Pin
 	HAL_GPIO_WritePin(nCANSTBY_Port, nCANSTBY_Pin, GPIO_PIN_RESET);
 #endif
+
+#if defined(STM32F0) || defined(STM32F4)
 	can->MCR |= CAN_MCR_INRQ ; // send can controller into initialization mode
+#elif defined(STM32G0)
+	can->CCCR |= FDCAN_CCCR_INIT ; // send can controller into initialization mode
+#endif
+
 }
+
+
 
 bool can_is_enabled(can_data_t *hcan)
 {
-	CAN_TypeDef *can = hcan->instance;
+CAN_TypeDef *can = hcan->instance;
+#if defined(STM32F0) || defined(STM32F4)
 	return (can->MCR & CAN_MCR_INRQ) == 0;
+#elif defined(STM32G0)
+	return (can->CCCR & FDCAN_CCCR_INIT) == 0;
+#endif
 }
+
+
 
 bool can_is_rx_pending(can_data_t *hcan)
 {
+#if defined(STM32F0) || defined(STM32F4)	
 	CAN_TypeDef *can = hcan->instance;
 	return ((can->RF0R & CAN_RF0R_FMP0) != 0);
+#elif defined(STM32G0)
+    _hcan = hcan;
+	return (rx_can2_ok != 0);
+#endif	
 }
 
 bool can_receive(can_data_t *hcan, struct gs_host_frame *rx_frame)
 {
+
+#if defined(STM32F0) || defined(STM32F4)
+
 	CAN_TypeDef *can = hcan->instance;
 
 	if (can_is_rx_pending(hcan)) {
@@ -180,8 +328,32 @@ bool can_receive(can_data_t *hcan, struct gs_host_frame *rx_frame)
 	} else {
 		return false;
 	}
+#elif defined(STM32G0)
+uint16_t  i=0;
+	
+	_hcan = hcan;
+
+	rx_frame->can_id = RxHeader.Identifier;
+	rx_frame->can_dlc = (uint8_t)(RxHeader.DataLength>>16);
+
+	rx_frame->data[0] = RxData[0];
+	rx_frame->data[1] = RxData[1];
+	rx_frame->data[2] = RxData[2];
+	rx_frame->data[3] = RxData[3];
+	rx_frame->data[4] = RxData[4];
+	rx_frame->data[5] = RxData[5];
+	rx_frame->data[6] = RxData[6];
+	rx_frame->data[7] = RxData[7];	
+
+	for(i=0;i<8;i++)
+	{
+		RxData[i]=0;
+	}
+	return true;
+#endif
 }
 
+#if defined(STM32F0) || defined(STM32F4)
 static CAN_TxMailBox_TypeDef *can_find_free_mailbox(can_data_t *hcan)
 {
 	CAN_TypeDef *can = hcan->instance;
@@ -197,9 +369,12 @@ static CAN_TxMailBox_TypeDef *can_find_free_mailbox(can_data_t *hcan)
 		return 0;
 	}
 }
+#endif
 
 bool can_send(can_data_t *hcan, struct gs_host_frame *frame)
 {
+#if defined(STM32F0) || defined(STM32F4)
+
 	CAN_TxMailBox_TypeDef *mb = can_find_free_mailbox(hcan);
 	if (mb != 0) {
 
@@ -238,17 +413,66 @@ bool can_send(can_data_t *hcan, struct gs_host_frame *frame)
 	} else {
 		return false;
 	}
+
+#elif defined(STM32G0)
+
+    _hcan = hcan;
+    /* Check that the Tx FIFO/Queue is not full */
+    if((hfdcan2.Instance->TXFQS & FDCAN_TXFQS_TFQF) != 0U)
+    {
+		return false;
+    }
+	
+	TxHeader.Identifier = frame->can_id & 0x7FF;
+	TxHeader.IdType = FDCAN_STANDARD_ID;
+	TxHeader.TxFrameType = FDCAN_DATA_FRAME;
+	TxHeader.DataLength = (uint32_t)((frame->can_dlc & 0x0F)<<16);;
+	TxHeader.ErrorStateIndicator = FDCAN_ESI_ACTIVE;
+	TxHeader.BitRateSwitch = FDCAN_BRS_OFF;
+	TxHeader.FDFormat = FDCAN_CLASSIC_CAN;
+	TxHeader.TxEventFifoControl = FDCAN_NO_TX_EVENTS;
+	TxHeader.MessageMarker = 0;
+
+	HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan2, &TxHeader, frame->data);
+	
+	return true;
+
+#endif
+
 }
 
 uint32_t can_get_error_status(can_data_t *hcan)
 {
+#if defined(STM32F0) || defined(STM32F4)
 	CAN_TypeDef *can = hcan->instance;
 	return can->ESR;
+#elif defined(STM32G0)
+
+	uint32_t esr_data=0x00000000;
+
+    _hcan = hcan;
+
+	esr_data |=(uint32_t)(((FDCAN2->PSR & 0x00000040)>>6)<<0);//EW
+	esr_data |=(uint32_t)(((FDCAN2->PSR & 0x00000020)>>5)<<1);//EP
+	esr_data |=(uint32_t)(((FDCAN2->PSR & 0x00000080)>>7)<<2);//BO
+	esr_data |=(uint32_t)(((FDCAN2->PSR & 0x00000007)>>0)<<4);//LEC
+
+	esr_data |=(uint32_t)(((FDCAN2->ECR & 0x000000FF)>>0)<<16);//TEC
+	esr_data |=(uint32_t)(((FDCAN2->ECR & 0x00007F00)>>8)<<24);//REC
+	
+	return  esr_data;
+#endif
 }
 
+uint32_t _err;
 static bool status_is_active(uint32_t err)
 {
+#if defined(STM32F0) || defined(STM32F4)
 	return !(err & (CAN_ESR_BOFF | CAN_ESR_EPVF));
+#elif defined(STM32G0)
+	_err=err;
+	return !(FDCAN2->PSR & (FDCAN_PSR_BO | FDCAN_PSR_EP));
+#endif
 }
 
 bool can_parse_error_status(uint32_t err, uint32_t last_err, can_data_t *hcan, struct gs_host_frame *frame)
@@ -257,6 +481,10 @@ bool can_parse_error_status(uint32_t err, uint32_t last_err, can_data_t *hcan, s
 	 * whether there's anything worth sending. This variable tracks that final
 	 * result. */
 	bool should_send = false;
+
+#if defined(STM32G0)
+    _hcan = hcan;
+#endif
 
 	frame->echo_id = 0xFFFFFFFF;
 	frame->can_id  = CAN_ERR_FLAG | CAN_ERR_CRTL;
@@ -360,9 +588,14 @@ bool can_parse_error_status(uint32_t err, uint32_t last_err, can_data_t *hcan, s
 			break;
 	}
 
+#if defined(STM32F0) || defined(STM32F4)
 	CAN_TypeDef *can = hcan->instance;
 	/* Write 7 to LEC so we know if it gets set to the same thing again */
 	can->ESR = 7<<4;
+#elif defined(STM32G0)
+	FDCAN2->ECR = 0x0000;
+	FDCAN2->PSR = 0x0007;	
+#endif
 
 	return should_send;
 }

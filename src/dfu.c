@@ -32,6 +32,7 @@ THE SOFTWARE.
 
 #define SYSMEM_STM32F042 0x1FFFC400
 #define SYSMEM_STM32F072 0x1FFFC800
+#define SYSMEM_STM32G0B1 0x1FFF0000
 
 static uint32_t dfu_reset_to_bootloader_magic;
 
@@ -59,7 +60,10 @@ void __initialize_hardware_early(void)
 			case 0x448: // STM32F07x
 				dfu_jump_to_bootloader(SYSMEM_STM32F072);
 				break;
-
+				
+			case 0x467: // STM32G0B1
+				dfu_jump_to_bootloader(SYSMEM_STM32G0B1);
+				break;
 		}
 	}
 

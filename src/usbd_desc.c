@@ -76,6 +76,7 @@ static const uint8_t USBD_FS_DeviceDesc[USB_LEN_DEV_DESC] = {
 	USBD_MAX_NUM_CONFIGURATION  /* bNumConfigurations */
 } ;
 
+
 /* USB Standard Device Descriptor */
 static const uint8_t USBD_LangIDDesc[USB_LEN_LANGID_STR_DESC] =
 {

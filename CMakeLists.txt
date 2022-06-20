@@ -20,6 +20,7 @@ add_compile_options(
 #need these later, per-platform
 set(CPUFLAGS_F0 -mcpu=cortex-m0)
 set(CPUFLAGS_F4 -mcpu=cortex-m4)
+set(CPUFLAGS_G0 -mcpu=cortex-m0plus)
 
 add_link_options(
     -mthumb -Wall -Wextra -g3
@@ -160,11 +161,26 @@ function(add_f407_target TGTNAME)
     show_object_size(${TGTNAME}_fw)
 endfunction()
 
+function(add_g0b1_target TGTNAME)
+	add_executable(${TGTNAME}_fw ${SOURCE_FILES})
+	add_dependencies(${TGTNAME}_fw version_h)
+    target_include_directories(${TGTNAME}_fw PRIVATE include/ ${CMAKE_CURRENT_BINARY_DIR})
+    target_compile_options(${TGTNAME}_fw BEFORE PRIVATE ${CPUFLAGS_G0})
+    target_compile_definitions(${TGTNAME}_fw PRIVATE BOARD_${TGTNAME} STM32G0)
+    target_link_options(${TGTNAME}_fw BEFORE PRIVATE ${CPUFLAGS_G0})
+	target_link_options(${TGTNAME}_fw PRIVATE -T ${CMAKE_SOURCE_DIR}/ldscripts/STM32G0B1XX.ld)
+    target_link_libraries(${TGTNAME}_fw PRIVATE STM32_HAL_STM32G0B1xx STM32_USB_Device_Library_STM32G0B1xx)
+    make_bin_file(${TGTNAME}_fw)
+    dfu_flash(${TGTNAME}_fw)
+    show_object_size(${TGTNAME}_fw)
+endfunction()
+
 ########## generate list of targets.
 # the "_fw" part is appended automatically
 set(TGT042_LIST "cantact" "canalyze" "canable" "usb2can" "cannette")
 set(TGT072_LIST "candleLight")
 set(TGT407_LIST "STM32F4_DevBoard")
+set(TGT0B1_LIST "G0B1_U2C")
 
 
 foreach (TGTNAME IN LISTS TGT042_LIST)
@@ -185,6 +201,13 @@ foreach (TGTNAME IN LISTS TGT407_LIST)
 	option(BUILD_${TGTNAME} "Build firmware for \"${TGTNAME}\" (default=yes)" ON)
 	if (BUILD_${TGTNAME})
 		add_f407_target(${TGTNAME})
+	endif()
+endforeach()
+
+foreach (TGTNAME IN LISTS TGT0B1_LIST)
+	option(BUILD_${TGTNAME} "Build firmware for \"${TGTNAME}\" (default=yes)" ON)
+	if (BUILD_${TGTNAME})
+        add_g0b1_target(${TGTNAME})
 	endif()
 endforeach()
 

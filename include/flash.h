@@ -33,3 +33,8 @@ void flash_load();
 bool flash_set_user_id(uint8_t channel, uint32_t user_id);
 uint32_t flash_get_user_id(uint8_t channel);
 void flash_flush();
+
+#if defined(STM32G0)
+uint32_t getPage(uint32_t Address);
+#endif
+

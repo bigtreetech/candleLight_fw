@@ -33,6 +33,25 @@ THE SOFTWARE.
 
 #include <gs_usb.h>
 
+#if defined(STM32G0)
+
+#define  CAN_TypeDef FDCAN_GlobalTypeDef
+
+uint8_t	rx_can2_ok;
+
+extern FDCAN_HandleTypeDef hfdcan2;
+
+extern FDCAN_TxHeaderTypeDef TxHeader;
+extern FDCAN_RxHeaderTypeDef RxHeader;
+
+extern uint8_t TxData[64];
+extern uint8_t RxData[64];
+
+void FDCAN_Config(void);
+#endif
+
+
+
 typedef struct {
 	CAN_TypeDef *instance;
 	uint16_t brp;
