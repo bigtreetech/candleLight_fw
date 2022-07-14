@@ -159,10 +159,6 @@ int main(void)
 			if (frame != 0)
 			{
 				if (can_receive(&hCAN, frame)) {
-
-					#if defined(STM32G0)
-					rx_can2_ok=0;
-					#endif
 					
 					received_count++;
 
@@ -353,8 +349,6 @@ void HAL_FDCAN_MspInit(FDCAN_HandleTypeDef* hfdcan)
 		GPIO_InitStruct.Alternate = GPIO_AF3_FDCAN2;
 		HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
-		HAL_NVIC_SetPriority(TIM16_FDCAN_IT0_IRQn, 1, 0);
-		HAL_NVIC_EnableIRQ(TIM16_FDCAN_IT0_IRQn);
 	}
 }
 
@@ -365,18 +359,8 @@ void HAL_FDCAN_MspDeInit(FDCAN_HandleTypeDef* hfdcan)
 		__HAL_RCC_FDCAN_CLK_DISABLE();
 
 		HAL_GPIO_DeInit(GPIOB, GPIO_PIN_5|GPIO_PIN_6);
-		HAL_NVIC_DisableIRQ(TIM16_FDCAN_IT0_IRQn);
 	}
 }
 
-void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
-{
-	if((RxFifo0ITs & FDCAN_IT_RX_FIFO0_NEW_MESSAGE) != RESET)
-	{
-		HAL_FDCAN_GetRxMessage(hfdcan, FDCAN_RX_FIFO0, &RxHeader, RxData);
-
-		rx_can2_ok = 1;
-	}
-}
 #endif
 

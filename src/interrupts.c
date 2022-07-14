@@ -57,13 +57,6 @@ void USB_Handler(void)
 
 #elif defined(STM32G0)
 
-extern FDCAN_HandleTypeDef hfdcan2;
-
-void TIM16_FDCAN_IT0_IRQHandler(void)
-{
-  HAL_FDCAN_IRQHandler(&hfdcan2);
-}
-
 void USB_UCPD1_2_IRQHandler(void)
 {
   HAL_PCD_IRQHandler(&hpcd_USB_FS);
@@ -268,7 +261,7 @@ const pFunc InterruptVectorTable[48] = {
     0,                      // int 18: TIM7
     0,                      // int 19: TIM14
     0,                      // int 20: TIM15
-    TIM16_FDCAN_IT0_IRQHandler, // int 21: TIM16
+    0,                      // int 21: TIM16
     0,                      // int 22: TIM17
     0,                      // int 23: I2C1
     0,                      // int 24: I2C2

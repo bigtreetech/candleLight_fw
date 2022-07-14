@@ -35,7 +35,7 @@ FDCAN_HandleTypeDef hfdcan2;
 FDCAN_TxHeaderTypeDef TxHeader;
 FDCAN_RxHeaderTypeDef RxHeader;
 
-uint8_t	rx_can2_ok = 0;
+// volatile uint8_t  rx_can2_ok = 0;
 can_data_t *_hcan;
 
 uint8_t TxData[64]={0};
@@ -217,11 +217,12 @@ void can_enable(can_data_t *hcan, bool loop_back, bool listen_only, bool one_sho
 
 	if(one_shot)
 	{
-	  hfdcan2.Init.AutoRetransmission = ENABLE;
+		hfdcan2.Init.AutoRetransmission = DISABLE;
 	}
 	else
 	{
-	  hfdcan2.Init.AutoRetransmission = DISABLE;
+	  
+		hfdcan2.Init.AutoRetransmission = ENABLE;	 
 	}
 
 	hfdcan2.Init.TransmitPause = DISABLE;
@@ -286,8 +287,8 @@ bool can_is_rx_pending(can_data_t *hcan)
 	CAN_TypeDef *can = hcan->instance;
 	return ((can->RF0R & CAN_RF0R_FMP0) != 0);
 #elif defined(STM32G0)
-    _hcan = hcan;
-	return (rx_can2_ok != 0);
+     _hcan = hcan;
+	return ((FDCAN2->RXF0S & FDCAN_RXF0S_F0FL) != 0);
 #endif	
 }
 
@@ -332,6 +333,8 @@ bool can_receive(can_data_t *hcan, struct gs_host_frame *rx_frame)
 uint16_t  i=0;
 	
 	_hcan = hcan;
+
+	HAL_FDCAN_GetRxMessage(&hfdcan2, FDCAN_RX_FIFO0, &RxHeader, RxData);
 
 	rx_frame->can_id = RxHeader.Identifier;
 	rx_frame->can_dlc = (uint8_t)(RxHeader.DataLength>>16);

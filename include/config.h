@@ -40,6 +40,8 @@ THE SOFTWARE.
 
 #define CAN_QUEUE_SIZE 64
 
+
+
 #define USBD_VID                     0x1d50
 #define USBD_PID_FS                  0x606f
 #define USBD_LANGID_STRING           1033

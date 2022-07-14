@@ -180,6 +180,8 @@
 
 #ifdef HAL_FDCAN_MODULE_ENABLED
 
+#endif
+
 /* Private typedef -----------------------------------------------------------*/
 /* Private define ------------------------------------------------------------*/
 /** @addtogroup FDCAN_Private_Constants
@@ -320,39 +322,39 @@ HAL_StatusTypeDef HAL_FDCAN_Init(FDCAN_HandleTypeDef *hfdcan)
   assert_param(IS_FDCAN_MAX_VALUE(hfdcan->Init.ExtFiltersNbr, SRAMCAN_FLE_NBR));
   assert_param(IS_FDCAN_TX_FIFO_QUEUE_MODE(hfdcan->Init.TxFifoQueueMode));
 
-// #if USE_HAL_FDCAN_REGISTER_CALLBACKS == 1
-//   if (hfdcan->State == HAL_FDCAN_STATE_RESET)
-//   {
-//     /* Allocate lock resource and initialize it */
-//     hfdcan->Lock = HAL_UNLOCKED;
+#if USE_HAL_FDCAN_REGISTER_CALLBACKS == 1
+  if (hfdcan->State == HAL_FDCAN_STATE_RESET)
+  {
+    /* Allocate lock resource and initialize it */
+    hfdcan->Lock = HAL_UNLOCKED;
 
-//     /* Reset callbacks to legacy functions */
-//     hfdcan->TxEventFifoCallback         = HAL_FDCAN_TxEventFifoCallback;         /* Legacy weak TxEventFifoCallback */
-//     hfdcan->RxFifo0Callback             = HAL_FDCAN_RxFifo0Callback;             /* Legacy weak RxFifo0Callback     */
-//     hfdcan->RxFifo1Callback             = HAL_FDCAN_RxFifo1Callback;             /* Legacy weak RxFifo1Callback     */
-//     hfdcan->TxFifoEmptyCallback         = HAL_FDCAN_TxFifoEmptyCallback;         /* Legacy weak TxFifoEmptyCallback */
-//     hfdcan->TxBufferCompleteCallback    = HAL_FDCAN_TxBufferCompleteCallback;    /* Legacy weak
-//                                                                                     TxBufferCompleteCallback        */
-//     hfdcan->TxBufferAbortCallback       = HAL_FDCAN_TxBufferAbortCallback;       /* Legacy weak
-//                                                                                     TxBufferAbortCallback           */
-//     hfdcan->HighPriorityMessageCallback = HAL_FDCAN_HighPriorityMessageCallback; /* Legacy weak
-//                                                                                     HighPriorityMessageCallback     */
-//     hfdcan->TimestampWraparoundCallback = HAL_FDCAN_TimestampWraparoundCallback; /* Legacy weak
-//                                                                                     TimestampWraparoundCallback     */
-//     hfdcan->TimeoutOccurredCallback     = HAL_FDCAN_TimeoutOccurredCallback;     /* Legacy weak
-//                                                                                     TimeoutOccurredCallback         */
-//     hfdcan->ErrorCallback               = HAL_FDCAN_ErrorCallback;               /* Legacy weak ErrorCallback       */
-//     hfdcan->ErrorStatusCallback         = HAL_FDCAN_ErrorStatusCallback;         /* Legacy weak ErrorStatusCallback */
+    /* Reset callbacks to legacy functions */
+    hfdcan->TxEventFifoCallback         = HAL_FDCAN_TxEventFifoCallback;         /* Legacy weak TxEventFifoCallback */
+    hfdcan->RxFifo0Callback             = HAL_FDCAN_RxFifo0Callback;             /* Legacy weak RxFifo0Callback     */
+    hfdcan->RxFifo1Callback             = HAL_FDCAN_RxFifo1Callback;             /* Legacy weak RxFifo1Callback     */
+    hfdcan->TxFifoEmptyCallback         = HAL_FDCAN_TxFifoEmptyCallback;         /* Legacy weak TxFifoEmptyCallback */
+    hfdcan->TxBufferCompleteCallback    = HAL_FDCAN_TxBufferCompleteCallback;    /* Legacy weak
+                                                                                    TxBufferCompleteCallback        */
+    hfdcan->TxBufferAbortCallback       = HAL_FDCAN_TxBufferAbortCallback;       /* Legacy weak
+                                                                                    TxBufferAbortCallback           */
+    hfdcan->HighPriorityMessageCallback = HAL_FDCAN_HighPriorityMessageCallback; /* Legacy weak
+                                                                                    HighPriorityMessageCallback     */
+    hfdcan->TimestampWraparoundCallback = HAL_FDCAN_TimestampWraparoundCallback; /* Legacy weak
+                                                                                    TimestampWraparoundCallback     */
+    hfdcan->TimeoutOccurredCallback     = HAL_FDCAN_TimeoutOccurredCallback;     /* Legacy weak
+                                                                                    TimeoutOccurredCallback         */
+    hfdcan->ErrorCallback               = HAL_FDCAN_ErrorCallback;               /* Legacy weak ErrorCallback       */
+    hfdcan->ErrorStatusCallback         = HAL_FDCAN_ErrorStatusCallback;         /* Legacy weak ErrorStatusCallback */
 
-//     if (hfdcan->MspInitCallback == NULL)
-//     {
-//       hfdcan->MspInitCallback = HAL_FDCAN_MspInit;  /* Legacy weak MspInit */
-//     }
+    if (hfdcan->MspInitCallback == NULL)
+    {
+      hfdcan->MspInitCallback = HAL_FDCAN_MspInit;  /* Legacy weak MspInit */
+    }
 
-//     /* Init the low level hardware: CLOCK, NVIC */
-//     hfdcan->MspInitCallback(hfdcan);
-//   }
-// #else
+    /* Init the low level hardware: CLOCK, NVIC */
+    hfdcan->MspInitCallback(hfdcan);
+  }
+#else
   if (hfdcan->State == HAL_FDCAN_STATE_RESET)
   {
     /* Allocate lock resource and initialize it */

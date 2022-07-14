@@ -37,7 +37,6 @@ THE SOFTWARE.
 
 #define  CAN_TypeDef FDCAN_GlobalTypeDef
 
-uint8_t	rx_can2_ok;
 
 extern FDCAN_HandleTypeDef hfdcan2;
 
